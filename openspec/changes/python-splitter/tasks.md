@@ -28,13 +28,13 @@ Justification: parser+classifier is the foundation (PR 1). Proposal+executor bui
 
 **Delivers**: Installable CLI with `--help`, AST parsing and top-level classification, unit-test coverage for parser and classifier. No file writes.
 
-- [ ] 1.1 `build(config): add pyproject.toml with hatchling, typer+rich deps, ruff/mypy/pytest config` — `pyproject.toml`, `.gitattributes` — REQ-CLI-001 entry point
-- [ ] 1.2 `feat(cli): create typer app entry point with split/reconcile stubs and __main__` — `src/cli_app/__init__.py`, `__main__.py`, `cli.py` — REQ-CLI-001, REQ-CLI-002 sig, REQ-CLI-003 sig
-- [ ] 1.3 `feat(splitter): add parser with parse_source and classify_node` — `src/cli_app/splitter/__init__.py`, `parser.py` (DefinitionKind enum, parse_source, classify_node) — REQ-ABD-001
-- [ ] 1.4 `feat(splitter): add classifier with classify_top_level and Definition dataclass` — `src/cli_app/splitter/classifier.py` — REQ-ABD-001 (order, decorated), REQ-ABD-002 (unclassified via If/Expr)
-- [ ] 1.5 `feat(splitter): add internal paths helper with resolve_source and package_dir_for` — `src/cli_app/_internal/__init__.py`, `paths.py` — design: paths contract
-- [ ] 1.6 `test(splitter): add unit tests for parser — inline ast strings, utf-8, syntax error` — `tests/conftest.py`, `tests/unit/test_parser.py` — REQ-ABD-001 scenarios
-- [ ] 1.7 `test(splitter): add unit tests for classifier — ClassDef, FunctionDef, AsyncFunctionDef, Assign, If/TYPE_CHECKING, Expr` — `tests/unit/test_classifier.py` — REQ-ABD-001, REQ-ABD-002 scenarios
+- [x] 1.1 `build(config): add pyproject.toml with hatchling, typer+rich deps, ruff/mypy/pytest config` — `pyproject.toml`, `.gitattributes` — REQ-CLI-001 entry point
+- [x] 1.2 `feat(cli): create typer app entry point with split/reconcile stubs and __main__` — `src/cli_app/__init__.py`, `__main__.py`, `cli.py` — REQ-CLI-001, REQ-CLI-002 sig, REQ-CLI-003 sig
+- [x] 1.3 `feat(splitter): add parser with parse_source and classify_node` — `src/cli_app/splitter/__init__.py`, `parser.py` (DefinitionKind enum, parse_source, classify_node) — REQ-ABD-001
+- [x] 1.4 `feat(splitter): add classifier with classify_top_level and Definition dataclass` — `src/cli_app/splitter/classifier.py` — REQ-ABD-001 (order, decorated), REQ-ABD-002 (unclassified via If/Expr)
+- [x] 1.5 `feat(splitter): add internal paths helper with resolve_source and package_dir_for` — `src/cli_app/_internal/__init__.py`, `paths.py` — design: paths contract
+- [x] 1.6 `test(splitter): add unit tests for parser — inline ast strings, utf-8, syntax error` — `tests/conftest.py`, `tests/unit/test_parser.py` — REQ-ABD-001 scenarios
+- [x] 1.7 `test(splitter): add unit tests for classifier — ClassDef, FunctionDef, AsyncFunctionDef, Assign, If/TYPE_CHECKING, Expr` — `tests/unit/test_classifier.py` — REQ-ABD-001, REQ-ABD-002 scenarios
 
 ## PR 2: Proposal + Executor + CLI Wiring (~370 lines)
 
