@@ -63,3 +63,10 @@ rules:
     coverage_threshold: 0
   archive:
     - Warn before merging destructive deltas
+
+# Session preflight decisions — propagated from sdd-init, updated as the session lands
+# (chain_strategy was set interactively after sdd-tasks forecast exceeded 400 lines).
+chain_strategy: stacked-to-main
+delivery_strategy: force-chained
+review_budget_lines: 400
+execution_mode: auto
