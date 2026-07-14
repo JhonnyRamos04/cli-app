@@ -1,0 +1,65 @@
+# openspec/config.yaml
+schema: spec-driven
+
+context: |
+  Project: cli-app
+  Stack: Python (target 3.11+) CLI app
+  Architecture: Hybrid AST-proposes-user-confirms — uses ast module to detect module boundaries,
+                shows plan, splits on confirmation. See architecture/splitter-strategy in Engram.
+  Testing: Not yet installed — pytest proposed as framework.
+  Platform: Windows dev, Linux deployment. Cross-platform CLI.
+  Session Preflight: auto mode, force-chained PRs, 400-line review budget.
+
+strict_tdd: false
+# Strict TDD is false because no test framework is installed yet.
+# The apply phase must install pytest and dependencies before running tests.
+
+testing:
+  framework: pytest
+  command: pytest
+  layers:
+    unit:
+      available: false
+      tool: pytest
+    integration:
+      available: false
+      tool: pytest
+    e2e:
+      available: false
+      tool: null
+  coverage:
+    available: false
+    command: pytest --cov
+  quality:
+    linter:
+      available: false
+      tool: ruff
+    type_checker:
+      available: false
+      tool: mypy
+    formatter:
+      available: false
+      tool: ruff format
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+  apply:
+    - Follow existing code patterns
+    tdd: false
+    test_command: pytest
+  verify:
+    test_command: pytest
+    build_command: ""
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
