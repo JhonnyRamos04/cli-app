@@ -5,11 +5,21 @@ a :class:`SplitPlan`. The default ``type_based`` strategy yields a fixed
 set of module files (``models.py``, ``functions.py``, ``constants.py``,
 ``imports.py``) plus one ``unclassified_<name>.py`` file per unclassified
 definition (REQ-ABD-003).
+
+Warnings about unclassified items and empty input are both stored in
+:class:`SplitPlan.warnings` (so a CLI layer can surface them via
+``rich``) **and** emitted to ``stderr`` in a spec-compliant format:
+
+- unclassified item: ``unclassified: {kind} inside {container} at line N``
+  (REQ-ABD-002, e.g. ``"unclassified: class inside conditional at line 5"``)
+- empty input: ``warning: no top-level definitions found in <source_path>``
+  (REQ-ABD-003)
 """
 
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -45,8 +55,12 @@ class SplitPlan:
         source_path: The path to the source file (kept for traceability
             and for executor code that needs the original location).
         modules: The proposed modules, in canonical order.
-        warnings: Non-blocking warnings, e.g. ``"unclassified at line 5"``
-            or ``"no top-level definitions found"``.
+        warnings: Non-blocking warnings, e.g.
+            ``"unclassified: class inside conditional at line 5"``
+            (REQ-ABD-002) or
+            ``"warning: no top-level definitions found in <source_path>"``
+            (REQ-ABD-003). The same strings are also written to
+            ``stderr`` by :func:`build_proposal`.
     """
 
     package_name: str
@@ -79,12 +93,27 @@ def _sanitize_module_stem(name: str) -> str:
 
 
 def _warning_for_unclassified(definition: Definition) -> str:
-    """Format a warning string for a single unclassified definition."""
-    snippet = ""
-    if definition.source_segment:
-        first_line = definition.source_segment.splitlines()[0]
-        snippet = f": {first_line[:60]}"
-    return f"unclassified at line {definition.lineno}{snippet}"
+    """Format a warning string for a single unclassified definition.
+
+    Renders the spec-mandated format for REQ-ABD-002. When the
+    :class:`Definition` was reclassified from a known kind (e.g. a class
+    inside ``if TYPE_CHECKING:``), the format is
+    ``"unclassified: <kind> inside <container> at line N"``. When no
+    original kind is available (a bare module-level expression, an
+    ``If``/``Try`` wrapper itself, etc.) the format falls back to
+    ``"unclassified: <name> at line N"``.
+    """
+    if definition.original_kind is not None and definition.container is not None:
+        return (
+            f"unclassified: {definition.original_kind.value} inside "
+            f"{definition.container} at line {definition.lineno}"
+        )
+    return f"unclassified: {definition.name} at line {definition.lineno}"
+
+
+def _empty_file_warning(source_path: Path) -> str:
+    """Format the empty-file warning string for REQ-ABD-003."""
+    return f"warning: no top-level definitions found in {source_path}"
 
 
 def build_proposal(
@@ -100,15 +129,19 @@ def build_proposal(
     ``models.py`` (classes), ``functions.py`` (functions),
     ``constants.py`` (constants), ``imports.py`` (at most one
     ``IMPORT_BLOCK``). Every unclassified definition gets its own
-    ``unclassified_<sanitized_name>.py`` file. Warnings are emitted for
-    every unclassified item and for empty input.
+    ``unclassified_<sanitized_name>.py`` file. Warnings are emitted to
+    ``stderr`` for every unclassified item (REQ-ABD-002) and for empty
+    input (REQ-ABD-003), and the same strings are also stored in the
+    returned :class:`SplitPlan.warnings` so a future CLI layer can
+    surface them via ``rich``.
 
     Args:
         definitions: The classified top-level definitions, in the order
             returned by :func:`classify_top_level`.
         strategy: The grouping strategy. Only ``"type_based"`` is
             supported in v1.
-        source_path: The path to the source file (for traceability).
+        source_path: The path to the source file (for traceability and
+            for the empty-file warning message).
         package_name: The proposed package directory name.
 
     Returns:
@@ -125,7 +158,9 @@ def build_proposal(
 
     warnings: list[str] = []
     if not definitions:
-        warnings.append("no top-level definitions found")
+        empty_msg = _empty_file_warning(source_path)
+        warnings.append(empty_msg)
+        print(empty_msg, file=sys.stderr)
 
     by_kind: dict[DefinitionKind, list[Definition]] = {kind: [] for kind in DefinitionKind}
     for definition in definitions:
@@ -147,7 +182,9 @@ def build_proposal(
         )
 
     for definition in by_kind[DefinitionKind.UNCLASSIFIED]:
-        warnings.append(_warning_for_unclassified(definition))
+        warning = _warning_for_unclassified(definition)
+        warnings.append(warning)
+        print(warning, file=sys.stderr)
 
     return SplitPlan(
         package_name=package_name,

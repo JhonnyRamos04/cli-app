@@ -34,15 +34,17 @@ def test_default_strategy_is_type_based() -> None:
 def test_build_proposal_with_empty_input_emits_warning(tmp_path: Path) -> None:
     """An empty definition list emits the ``no top-level definitions found``
     warning (REQ-ABD-003)."""
+    src = tmp_path / "empty.py"
     plan = build_proposal(
         (),
-        source_path=tmp_path / "empty.py",
+        source_path=src,
         package_name="empty",
     )
 
     assert isinstance(plan, SplitPlan)
     assert plan.modules == ()
-    assert "no top-level definitions found" in plan.warnings
+    assert any("no top-level definitions found" in w for w in plan.warnings)
+    assert any(str(src) in w for w in plan.warnings)
 
 
 def test_build_proposal_with_single_class_yields_models_py(tmp_path: Path) -> None:
@@ -155,4 +157,64 @@ def test_build_proposal_rejects_unknown_strategy(tmp_path: Path) -> None:
             strategy="random",
             source_path=tmp_path / "x.py",
             package_name="x",
+        )
+
+
+@pytest.mark.parametrize(
+    ("definitions", "source_name", "expected_substrings"),
+    [
+        pytest.param(
+            (
+                Definition(
+                    name="_Helper",
+                    kind=DefinitionKind.UNCLASSIFIED,
+                    lineno=5,
+                    end_lineno=6,
+                    source_segment="class _Helper:\n    pass\n",
+                    original_kind=DefinitionKind.CLASS,
+                    container="conditional",
+                ),
+            ),
+            "mylib.py",
+            ("unclassified: class inside conditional at line 5",),
+            id="unclassified-class-inside-conditional",
+        ),
+        pytest.param(
+            (),
+            "empty.py",
+            ("warning: no top-level definitions found in ", "empty.py"),
+            id="empty-file",
+        ),
+    ],
+)
+def test_warnings_emitted_to_stderr(
+    definitions: tuple[Definition, ...],
+    source_name: str,
+    expected_substrings: tuple[str, ...],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``build_proposal`` writes spec-mandated warnings to ``stderr``
+    (REQ-ABD-002, REQ-ABD-003) in addition to storing them on the
+    returned :class:`SplitPlan.warnings` tuple."""
+    source_path = tmp_path / source_name
+
+    plan = build_proposal(
+        definitions,
+        source_path=source_path,
+        package_name="pkg",
+    )
+
+    captured = capsys.readouterr()
+    stderr_lines = [line for line in captured.err.splitlines() if line]
+    assert stderr_lines, "expected at least one line on stderr"
+
+    for expected in expected_substrings:
+        assert any(expected in line for line in stderr_lines), (
+            f"expected substring {expected!r} in stderr output, got: {captured.err!r}"
+        )
+
+    for expected in expected_substrings:
+        assert any(expected in w for w in plan.warnings), (
+            f"expected substring {expected!r} in plan.warnings, got: {plan.warnings!r}"
         )

@@ -39,6 +39,18 @@ class Definition:
         lineno: The 1-based line number where the definition starts.
         end_lineno: The 1-based line number where the definition ends.
         source_segment: The verbatim source text spanning the definition.
+        original_kind: For items reclassified into ``UNCLASSIFIED`` because
+            they live inside a wrapper (e.g. a class inside ``if
+            TYPE_CHECKING:``), the natural kind they would have had. ``None``
+            when the item is unclassifiable on its own merits (a bare
+            ``Expr`` at module level, an ``If`` / ``Try`` wrapper itself,
+            etc.). Used by the proposal engine to render spec-compliant
+            warnings (REQ-ABD-002).
+        container: For items reclassified into ``UNCLASSIFIED``, the
+            surrounding context. One of ``"conditional"`` (inside an ``if``),
+            ``"try"`` (inside a ``try``), or ``"module"`` (top-level
+            unclassifiable). ``None`` when the definition is not
+            unclassified.
     """
 
     name: str
@@ -46,6 +58,8 @@ class Definition:
     lineno: int
     end_lineno: int
     source_segment: str
+    original_kind: DefinitionKind | None = None
+    container: str | None = None
 
 
 def _segment(source: str, node: ast.stmt) -> str:
@@ -118,13 +132,15 @@ def classify_node(node: ast.stmt, source: str) -> Definition:
         )
     if isinstance(node, ast.Assign):
         name = _name_of_assign(node)
-        kind = DefinitionKind.CONSTANT if _is_constant_name(name) else DefinitionKind.UNCLASSIFIED
+        is_constant = _is_constant_name(name)
+        kind = DefinitionKind.CONSTANT if is_constant else DefinitionKind.UNCLASSIFIED
         return Definition(
             name=name,
             kind=kind,
             lineno=node.lineno,
             end_lineno=end_lineno,
             source_segment=_segment(source, node),
+            container=None if is_constant else "module",
         )
     if isinstance(node, (ast.Import, ast.ImportFrom)):
         return Definition(
@@ -140,26 +156,44 @@ def classify_node(node: ast.stmt, source: str) -> Definition:
         lineno=node.lineno,
         end_lineno=end_lineno,
         source_segment=_segment(source, node),
+        container="module",
     )
 
 
-def _harvest_inner_unclassified(nodes: list[ast.stmt], source: str) -> list[Definition]:
+def _harvest_inner_unclassified(
+    nodes: list[ast.stmt],
+    source: str,
+    container: str,
+) -> list[Definition]:
     """Convert ``ClassDef`` / ``FunctionDef`` / ``AsyncFunctionDef`` found
     inside conditional or ``try`` blocks into ``UNCLASSIFIED`` definitions.
+
+    The original kind (``CLASS`` for ``ClassDef``, ``FUNCTION`` for the
+    function variants) is preserved in ``original_kind`` and the wrapping
+    context is recorded in ``container`` so the proposal engine can render
+    spec-compliant warnings such as ``"unclassified: class inside
+    conditional at line N"`` (REQ-ABD-002).
     """
     result: list[Definition] = []
     for inner in nodes:
-        if isinstance(inner, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-            end_lineno = inner.end_lineno if inner.end_lineno is not None else inner.lineno
-            result.append(
-                Definition(
-                    name=inner.name,
-                    kind=DefinitionKind.UNCLASSIFIED,
-                    lineno=inner.lineno,
-                    end_lineno=end_lineno,
-                    source_segment=_segment(source, inner),
-                )
+        if isinstance(inner, ast.ClassDef):
+            original_kind: DefinitionKind = DefinitionKind.CLASS
+        elif isinstance(inner, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            original_kind = DefinitionKind.FUNCTION
+        else:
+            continue
+        end_lineno = inner.end_lineno if inner.end_lineno is not None else inner.lineno
+        result.append(
+            Definition(
+                name=inner.name,
+                kind=DefinitionKind.UNCLASSIFIED,
+                lineno=inner.lineno,
+                end_lineno=end_lineno,
+                source_segment=_segment(source, inner),
+                original_kind=original_kind,
+                container=container,
             )
+        )
     return result
 
 
@@ -198,12 +232,12 @@ def classify_top_level(tree: ast.Module, source: str) -> tuple[Definition, ...]:
             continue
 
         if isinstance(node, ast.If):
-            others.extend(_harvest_inner_unclassified(list(node.body), source))
+            others.extend(_harvest_inner_unclassified(list(node.body), source, "conditional"))
             others.append(classify_node(node, source))
             continue
 
         if isinstance(node, ast.Try):
-            others.extend(_harvest_inner_unclassified(list(node.body), source))
+            others.extend(_harvest_inner_unclassified(list(node.body), source, "try"))
             others.append(classify_node(node, source))
             continue
 
